@@ -8,27 +8,29 @@
   <!-- Bootstrap + DataTables -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-  <link href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     body {
       background-color: #fafafa;
       font-family: 'Inter', sans-serif;
-      margin: 2rem;
+      margin: 1.5rem;
     }
     h1 {
       text-align: center;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
     }
     .dataTables_wrapper .dataTables_filter input {
       border-radius: 8px;
       padding: 6px;
-      margin-left: 0.5em;
     }
     .dual-panel {
       display: flex;
-      gap: 2rem;
       flex-wrap: wrap;
+      gap: 1.5rem;
     }
     .panel {
       flex: 1 1 45%;
@@ -36,11 +38,13 @@
       border-radius: 10px;
       padding: 1rem;
       box-shadow: 0 0 8px rgba(0,0,0,0.05);
+      min-width: 280px;
     }
     .panel h5 {
       border-bottom: 2px solid #007bff33;
       padding-bottom: .5rem;
       margin-bottom: 1rem;
+      font-weight: 600;
     }
     .field-row {
       border-bottom: 1px dashed #eee;
@@ -51,7 +55,14 @@
     }
     .field-row strong {
       color: #333;
-      width: 40%;
+      width: 45%;
+      word-break: break-word;
+    }
+    #spiderChart {
+      max-width: 600px;
+      width: 100%;
+      height: auto;
+      margin: 0 auto 1.5rem;
     }
     footer {
       text-align: center;
@@ -59,24 +70,31 @@
       margin-top: 2rem;
       color: #777;
     }
+
+    @media (max-width: 768px) {
+      .dual-panel {
+        flex-direction: column;
+      }
+      .panel {
+        flex: 1 1 100%;
+      }
+      #spiderChart {
+        max-width: 100%;
+      }
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
     <h1>🧭 Museum Object Record Comparator</h1>
-    <p class="text-center text-muted mb-4">
+    <p class="text-center text-muted mb-3">
       Compare entries between your <b>Meteorology Catalogue 1922</b> and the <b>Science Museum Group Collections Online</b>.
     </p>
 
-    <!-- Search and filters -->
-    <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
-      <div>
-        <input type="text" id="globalSearch" class="form-control" placeholder="🔍 Search all records..." style="min-width: 250px;">
-      </div>
-      <div>
-        <button id="columnToggleBtn" class="btn btn-outline-primary btn-sm">🧩 Toggle Columns</button>
-      </div>
+    <!-- Search -->
+    <div class="mb-3 d-flex justify-content-center">
+      <input type="text" id="globalSearch" class="form-control w-50" placeholder="🔍 Search all records...">
     </div>
 
     <div class="table-responsive">
@@ -86,9 +104,7 @@
       </table>
     </div>
 
-    <footer>
-      Built on the third-floor.
-    </footer>
+    <footer>Built on the third-floor.</footer>
   </div>
 
   <!-- Dependencies -->
@@ -99,113 +115,147 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log("📂 Loading matched_records.csv ...");
+    document.addEventListener('DOMContentLoaded', async function() {
+      console.log("📂 Loading datasets...");
 
-      Papa.parse('matched_records.csv', {
-        download: true,
-        header: true,
-        complete: function(results) {
-          const data = results.data.filter(r => Object.keys(r).length > 1);
+      const [recordsData, comparisonData] = await Promise.all([
+        new Promise(res => Papa.parse('matched_records.csv', {download: true, header: true, complete: r => res(r.data.filter(d => Object.keys(d).length > 1))})),
+        new Promise(res => Papa.parse('entity_comparison_results.csv', {download: true, header: true, complete: r => res(r.data.filter(d => Object.keys(d).length > 1))}))
+      ]);
 
-          // Columns to show initially in the table
-          const visibleColumns = [
-            "Catalogue number", "Object name", "Object/Inventory number",
-            "uid", "identifier", "title"
-          ];
+      const visibleColumns = [
+        "Catalogue number", "Object name", "Object/Inventory number",
+        "uid", "identifier", "title"
+      ];
+      const columns = Object.keys(recordsData[0])
+        .filter(k => visibleColumns.includes(k))
+        .map(k => ({ title: k, data: k }));
 
-          // Build columns dynamically (show only chosen ones)
-          const columns = Object.keys(data[0])
-            .filter(key => visibleColumns.includes(key))
-            .map(k => ({ title: k, data: k }));
+      const table = $('#recordsTable').DataTable({
+        data: recordsData,
+        columns: columns,
+        pageLength: 25,
+        responsive: true,
+        order: [[0, 'asc']]
+      });
 
-          const table = $('#recordsTable').DataTable({
-            data: data,
-            columns: columns,
-            pageLength: 25,
-            responsive: true,
-            order: [[0, 'asc']],
-          });
+      $('#globalSearch').on('keyup', function() {
+        table.search(this.value).draw();
+      });
 
-          // 🔍 Global search bar
-          $('#globalSearch').on('keyup', function() {
-            table.search(this.value).draw();
-          });
+      const meteorologyFields = [
+        "Filename", "Catalogue number", "Object name", "Maker/Donor",
+        "Date of creation", "Object entry information", "Object/Inventory number"
+      ];
+      const smgFields = [
+        "uid", "identifier", "title", "description", "category",
+        "material", "object_name", "date", "place", "maker", "image"
+      ];
+      const metrics = ["ObjectNames", "Makers", "Materials", "Dates", "Places", "Descriptions", "Other"];
 
-          // 🧩 Column visibility toggles
-          $('#columnToggleBtn').on('click', function() {
-            let msg = 'Toggle columns by typing their number:\n\n';
-            table.columns().every(function(idx) {
-              msg += `[${idx}] ${this.header().textContent} ${this.visible() ? '(visible)' : '(hidden)'}\n`;
-            });
-            const input = prompt(msg + '\nEnter column numbers (comma-separated):');
-            if (input) {
-              input.split(',').map(i => i.trim()).forEach(num => {
-                const col = table.column(parseInt(num));
-                col.visible(!col.visible());
-              });
-            }
-          });
+      // Precompute global max for chart scaling
+      const maxVal = Math.max(
+        ...comparisonData.flatMap(r => metrics.map(m =>
+          Math.max(Number(r[`Meteorology_${m}`] || 0), Number(r[`SMG_${m}`] || 0))
+        ))
+      ) || 10;
 
-          // Field groups for side-by-side comparison
-          const meteorologyFields = [
-            "Filename", "Catalogue number", "Object name", "Maker/Donor",
-            "Date of creation", "Object entry information", "Object/Inventory number"
-          ];
-          const smgFields = [
-            "uid", "identifier", "title", "description", "category",
-            "material", "object_name", "date", "place", "maker", "image"
-          ];
+      $('#recordsTable tbody').on('click', 'tr', function() {
+        const rowData = table.row(this).data();
+        if (!rowData) return;
 
-          // 🪄 Dual-panel comparison popup
-          $('#recordsTable tbody').on('click', 'tr', function() {
-            const rowData = table.row(this).data();
-            if (!rowData) return;
+        const idx = table.row(this).index();
+        const comp = comparisonData.find(r => Number(r.RowIndex) === idx);
 
-            // Meteorology Catalogue panel
-            let leftHTML = `<div class="panel"><h5>📘 Meteorology Catalogue 1922</h5>`;
-            meteorologyFields.forEach(k => {
-              if (k in rowData) {
-                leftHTML += `<div class="field-row"><strong>${k}</strong><span>${rowData[k] || ''}</span></div>`;
-              }
-            });
-            leftHTML += `</div>`;
+        let chartHTML = comp ? `<div class="my-3"><canvas id="spiderChart"></canvas></div>` : "";
 
-            // Science Museum Group panel
-            let rightHTML = `<div class="panel"><h5>🏛️ Science Museum Group Collections Online</h5>`;
-            smgFields.forEach(k => {
-              if (k in rowData) {
-                let value = rowData[k] || '';
-                // Make images clickable if URLs
-                if (k === "image" && value) {
-                  value = `<a href="${value}" target="_blank">View image 🔗</a>`;
-                }
-                rightHTML += `<div class="field-row"><strong>${k}</strong><span>${value}</span></div>`;
-              }
-            });
-            rightHTML += `</div>`;
+        // Left panel (Meteorology)
+        let leftHTML = `<div class="panel"><h5>📘 Meteorology Catalogue 1922</h5>`;
+        meteorologyFields.forEach(k => {
+          if (k in rowData)
+            leftHTML += `<div class="field-row"><strong>${k}</strong><span>${rowData[k] || ''}</span></div>`;
+        });
+        leftHTML += `</div>`;
 
-            const modalHTML = `
-              <div class="modal fade" id="compareModal" tabindex="-1">
-                <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                  <div class="modal-content">
-                    <div class="modal-header">
-                      <h5 class="modal-title">🔎 Compare Record</h5>
-                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body dual-panel">
-                      ${leftHTML + rightHTML}
-                    </div>
-                  </div>
+        // Right panel (SMG)
+        let rightHTML = `<div class="panel"><h5>🏛️ Science Museum Group Collections Online</h5>`;
+        smgFields.forEach(k => {
+          if (k in rowData) {
+            let val = rowData[k] || '';
+            if (k === 'image' && val) val = `<a href="${val}" target="_blank">View image 🔗</a>`;
+            rightHTML += `<div class="field-row"><strong>${k}</strong><span>${val}</span></div>`;
+          }
+        });
+        rightHTML += `</div>`;
+
+        const modalHTML = `
+          <div class="modal fade" id="compareModal" tabindex="-1">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title">🔎 Compare Record</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                  ${chartHTML}
+                  <div class="dual-panel">${leftHTML + rightHTML}</div>
                 </div>
               </div>
-            `;
+            </div>
+          </div>
+        `;
 
-            // Remove existing modal if present
-            $('#compareModal').remove();
-            $('body').append(modalHTML);
-            const modal = new bootstrap.Modal(document.getElementById('compareModal'));
-            modal.show();
+        $('#compareModal').remove();
+        $('body').append(modalHTML);
+        const modal = new bootstrap.Modal(document.getElementById('compareModal'));
+        modal.show();
+
+        // Draw responsive radar chart
+        if (comp) {
+          const ctx = document.getElementById('spiderChart');
+          const meteorologyValues = metrics.map(m => Number(comp[`Meteorology_${m}`] || 0));
+          const smgValues = metrics.map(m => Number(comp[`SMG_${m}`] || 0));
+
+          new Chart(ctx, {
+            type: 'radar',
+            data: {
+              labels: metrics,
+              datasets: [
+                {
+                  label: 'Meteorology Catalogue',
+                  data: meteorologyValues,
+                  backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                  borderColor: 'rgba(54, 162, 235, 1)',
+                  borderWidth: 2,
+                  pointRadius: 3
+                },
+                {
+                  label: 'Science Museum Group',
+                  data: smgValues,
+                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                  borderColor: 'rgba(255, 99, 132, 1)',
+                  borderWidth: 2,
+                  pointRadius: 3
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                r: {
+                  beginAtZero: true,
+                  max: maxVal + 2,
+                  grid: { color: '#ddd' },
+                  angleLines: { color: '#ccc' },
+                  ticks: { stepSize: Math.ceil(maxVal / 5), color: '#555', backdropColor: 'transparent' }
+                }
+              },
+              plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                title: { display: true, text: 'Information Richness Comparison', font: { size: 14 } }
+              }
+            }
           });
         }
       });
