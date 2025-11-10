@@ -23,10 +23,6 @@
       margin-bottom: 1rem;
       font-weight: 600;
     }
-    .dataTables_wrapper .dataTables_filter input {
-      border-radius: 8px;
-      padding: 6px;
-    }
     .dual-panel {
       display: flex;
       flex-wrap: wrap;
@@ -58,11 +54,15 @@
       width: 45%;
       word-break: break-word;
     }
-    #spiderChart {
+    #spiderChartContainer {
       max-width: 600px;
       width: 100%;
-      height: auto;
-      margin: 0 auto 1.5rem;
+      margin: 1rem auto;
+      text-align: center;
+    }
+    #spiderChart {
+      width: 100%;
+      height: 400px;
     }
     footer {
       text-align: center;
@@ -70,7 +70,6 @@
       margin-top: 2rem;
       color: #777;
     }
-
     @media (max-width: 768px) {
       .dual-panel {
         flex-direction: column;
@@ -79,7 +78,7 @@
         flex: 1 1 100%;
       }
       #spiderChart {
-        max-width: 100%;
+        height: 300px;
       }
     }
   </style>
@@ -153,7 +152,7 @@
       ];
       const metrics = ["ObjectNames", "Makers", "Materials", "Dates", "Places", "Descriptions", "Other"];
 
-      // Precompute global max for chart scaling
+      // Precompute chart scaling
       const maxVal = Math.max(
         ...comparisonData.flatMap(r => metrics.map(m =>
           Math.max(Number(r[`Meteorology_${m}`] || 0), Number(r[`SMG_${m}`] || 0))
@@ -165,9 +164,14 @@
         if (!rowData) return;
 
         const idx = table.row(this).index();
-        const comp = comparisonData.find(r => Number(r.RowIndex) === idx);
+        const comp = comparisonData.find(r => Number(r.RowIndex) === idx - 1); // adjust offset by one
 
-        let chartHTML = comp ? `<div class="my-3"><canvas id="spiderChart"></canvas></div>` : "";
+        const chartHTML = `
+          <div id="spiderChartContainer">
+            <canvas id="spiderChart"></canvas>
+            <button id="downloadChart" class="btn btn-outline-secondary btn-sm mt-2">⬇️ Download Chart</button>
+          </div>
+        `;
 
         // Left panel (Meteorology)
         let leftHTML = `<div class="panel"><h5>📘 Meteorology Catalogue 1922</h5>`;
@@ -210,13 +214,11 @@
         const modal = new bootstrap.Modal(document.getElementById('compareModal'));
         modal.show();
 
-        // Draw responsive radar chart
+        const ctx = document.getElementById('spiderChart');
         if (comp) {
-          const ctx = document.getElementById('spiderChart');
           const meteorologyValues = metrics.map(m => Number(comp[`Meteorology_${m}`] || 0));
           const smgValues = metrics.map(m => Number(comp[`SMG_${m}`] || 0));
-
-          new Chart(ctx, {
+          const chart = new Chart(ctx, {
             type: 'radar',
             data: {
               labels: metrics,
@@ -246,9 +248,9 @@
                 r: {
                   beginAtZero: true,
                   max: maxVal + 2,
+                  ticks: { stepSize: Math.ceil(maxVal / 5), color: '#555', backdropColor: 'transparent' },
                   grid: { color: '#ddd' },
-                  angleLines: { color: '#ccc' },
-                  ticks: { stepSize: Math.ceil(maxVal / 5), color: '#555', backdropColor: 'transparent' }
+                  angleLines: { color: '#ccc' }
                 }
               },
               plugins: {
@@ -257,6 +259,16 @@
               }
             }
           });
+
+          // Download chart as PNG
+          document.getElementById('downloadChart').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = `${rowData["Object name"] || "comparison"}.png`;
+            link.href = chart.toBase64Image();
+            link.click();
+          });
+        } else {
+          ctx.parentElement.innerHTML = "<p class='text-muted fst-italic'>⚠️ No comparison data found for this record.</p>";
         }
       });
     });
