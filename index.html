@@ -160,7 +160,7 @@
         if (!rowData) return;
 
         const idx = table.row(this).index();
-        const comp = comparisonData.find(r => Number(r.RowIndex) === idx - 1);
+        const comp = comparisonData.find(r => Number(r.RowIndex) === idx);
 
         const chartHTML = `
           <div id="spiderChartContainer">
@@ -204,9 +204,9 @@
         });
 
         // Unique SMG
-        if (comp && comp.Unique_to_Museum) {
+        if (comp && comp.Unique_to_SMG) {
           try {
-            const cleaned = comp.Unique_to_Museum.replace(/[\r\n]+/g, ' ');
+            const cleaned = comp.Unique_to_SMG.replace(/[\r\n]+/g, ' ');
             const unique = JSON.parse(cleaned);
             rightHTML += `<div class="mt-3"><h6>🏺 Unique to Science Museum Group</h6>`;
             for (const [category, list] of Object.entries(unique)) {
@@ -215,7 +215,7 @@
             }
             rightHTML += `</div>`;
           } catch (e) {
-            console.warn("⚠️ Could not parse Unique_to_Museum:", e);
+            console.warn("⚠️ Could not parse Unique_to_SMG:", e);
           }
         }
         rightHTML += `</div>`;
@@ -313,3 +313,4 @@
   </script>
 </body>
 </html>
+
