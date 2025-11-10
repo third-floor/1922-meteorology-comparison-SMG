@@ -173,15 +173,31 @@
           </div>
         `;
 
-        // Left panel (Meteorology)
+        // --- Build Meteorology panel ---
         let leftHTML = `<div class="panel"><h5>📘 Meteorology Catalogue 1922</h5>`;
         meteorologyFields.forEach(k => {
           if (k in rowData)
             leftHTML += `<div class="field-row"><strong>${k}</strong><span>${rowData[k] || ''}</span></div>`;
         });
+
+        // --- Add Unique_to_Meteorology parsed content ---
+        if (comp && comp.Unique_to_Meteorology) {
+          try {
+            const unique = JSON.parse(comp.Unique_to_Meteorology);
+            leftHTML += `<div class="mt-3"><h6>🧩 Unique to Meteorology Catalogue</h6>`;
+            for (const [category, list] of Object.entries(unique)) {
+              if (Array.isArray(list) && list.length > 0) {
+                leftHTML += `<div><strong>${category}:</strong> ${list.join(', ')}</div>`;
+              }
+            }
+            leftHTML += `</div>`;
+          } catch (e) {
+            console.warn("Failed to parse Unique_to_Meteorology JSON", e);
+          }
+        }
         leftHTML += `</div>`;
 
-        // Right panel (SMG)
+        // --- Build SMG panel ---
         let rightHTML = `<div class="panel"><h5>🏛️ Science Museum Group Collections Online</h5>`;
         smgFields.forEach(k => {
           if (k in rowData) {
@@ -190,6 +206,22 @@
             rightHTML += `<div class="field-row"><strong>${k}</strong><span>${val}</span></div>`;
           }
         });
+
+        // --- Add Unique_to_SMG parsed content ---
+        if (comp && comp.Unique_to_Museum) {
+          try {
+            const unique = JSON.parse(comp.Unique_to_Museum);
+            rightHTML += `<div class="mt-3"><h6>🧩 Unique to Science Museum Group</h6>`;
+            for (const [category, list] of Object.entries(unique)) {
+              if (Array.isArray(list) && list.length > 0) {
+                rightHTML += `<div><strong>${category}:</strong> ${list.join(', ')}</div>`;
+              }
+            }
+            rightHTML += `</div>`;
+          } catch (e) {
+            console.warn("Failed to parse Unique_to_Museum JSON", e);
+          }
+        }
         rightHTML += `</div>`;
 
         const modalHTML = `
@@ -244,6 +276,12 @@
             options: {
               responsive: true,
               maintainAspectRatio: false,
+              interaction: { mode: null }, // disable hover interactions
+              plugins: {
+                tooltip: { enabled: false }, // disable hover tooltip
+                legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                title: { display: true, text: 'Information Richness Comparison', font: { size: 14 } }
+              },
               scales: {
                 r: {
                   beginAtZero: true,
@@ -253,10 +291,7 @@
                   angleLines: { color: '#ccc' }
                 }
               },
-              plugins: {
-                legend: { position: 'bottom', labels: { font: { size: 12 } } },
-                title: { display: true, text: 'Information Richness Comparison', font: { size: 14 } }
-              }
+              animation: false // disable animation completely
             }
           });
 
