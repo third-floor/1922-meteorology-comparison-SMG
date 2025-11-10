@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Museum Object Record Comparator</title>
+
+  <!-- Bootstrap + DataTables -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      background-color: #fafafa;
+      font-family: 'Inter', sans-serif;
+      margin: 2rem;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .dataTables_wrapper .dataTables_filter input {
+      border-radius: 8px;
+      padding: 6px;
+      margin-left: 0.5em;
+    }
+    .dual-panel {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .panel {
+      flex: 1 1 45%;
+      background: #fff;
+      border-radius: 10px;
+      padding: 1rem;
+      box-shadow: 0 0 8px rgba(0,0,0,0.05);
+    }
+    .panel h5 {
+      border-bottom: 1px solid #eee;
+      padding-bottom: .5rem;
+      margin-bottom: 1rem;
+    }
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed #eee;
+      padding: .25rem 0;
+      font-size: .95rem;
+    }
+    .field-row strong {
+      color: #333;
+    }
+    footer {
+      text-align: center;
+      font-size: .9rem;
+      margin-top: 2rem;
+      color: #777;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>🧭 Museum Object Record Comparator</h1>
+    <p class="text-center text-muted mb-4">
+      Compare catalogue entries side-by-side between your local dataset and the Science Museum Group records.
+    </p>
+
+    <!-- Search and filters -->
+    <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
+      <div>
+        <input type="text" id="globalSearch" class="form-control" placeholder="🔍 Search all records..." style="min-width: 250px;">
+      </div>
+      <div>
+        <button id="columnToggleBtn" class="btn btn-outline-primary btn-sm">🧩 Toggle Columns</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table id="recordsTable" class="table table-striped table-hover" style="width:100%">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <footer>
+      Built with ❤️ using DataTables & Bootstrap. Hosted on GitHub Pages.
+    </footer>
+  </div>
+
+  <!-- Dependencies -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log("📂 Loading matched_records.csv ...");
+
+      Papa.parse('matched_records.csv', {
+        download: true,
+        header: true,
+        complete: function(results) {
+          const data = results.data.filter(r => Object.keys(r).length > 1);
+          const columns = Object.keys(data[0]).map(k => ({ title: k, data: k }));
+
+          const table = $('#recordsTable').DataTable({
+            data: data,
+            columns: columns,
+            pageLength: 25,
+            responsive: true,
+            order: [[0, 'asc']],
+          });
+
+          // 🔍 Global search bar
+          $('#globalSearch').on('keyup', function() {
+            table.search(this.value).draw();
+          });
+
+          // 🧩 Column visibility toggles
+          $('#columnToggleBtn').on('click', function() {
+            let msg = 'Toggle columns by typing their number:\n\n';
+            table.columns().every(function(idx) {
+              msg += `[${idx}] ${this.header().textContent} ${this.visible() ? '(visible)' : '(hidden)'}\n`;
+            });
+            const input = prompt(msg + '\nEnter column numbers (comma-separated):');
+            if (input) {
+              input.split(',').map(i => i.trim()).forEach(num => {
+                const col = table.column(parseInt(num));
+                col.visible(!col.visible());
+              });
+            }
+          });
+
+          // 🪄 Dual-panel comparison popup
+          $('#recordsTable tbody').on('click', 'tr', function() {
+            const rowData = table.row(this).data();
+            if (!rowData) return;
+            const keys = Object.keys(rowData);
+
+            // Split columns roughly into left/right groups
+            const leftCols = keys.filter(k => k.toLowerCase().includes('object') || k.toLowerCase().includes('inventory') || k.toLowerCase().includes('clean_id'));
+            const rightCols = keys.filter(k => !leftCols.includes(k));
+
+            let leftHTML = `<div class="panel"><h5>📘 Local Catalogue</h5>`;
+            leftCols.forEach(k => {
+              leftHTML += `<div class="field-row"><strong>${k}</strong><span>${rowData[k] || ''}</span></div>`;
+            });
+            leftHTML += `</div>`;
+
+            let rightHTML = `<div class="panel"><h5>🏛️ Science Museum Group</h5>`;
+            rightCols.forEach(k => {
+              rightHTML += `<div class="field-row"><strong>${k}</strong><span>${rowData[k] || ''}</span></div>`;
+            });
+            rightHTML += `</div>`;
+
+            const modalHTML = `
+              <div class="modal fade" id="compareModal" tabindex="-1">
+                <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title">🔎 Compare Entry</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body dual-panel">
+                      ${leftHTML + rightHTML}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+
+            // Remove existing modal if present
+            $('#compareModal').remove();
+            $('body').append(modalHTML);
+            const modal = new bootstrap.Modal(document.getElementById('compareModal'));
+            modal.show();
+          });
+        }
+      });
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
