@@ -198,9 +198,19 @@
         smgFields.forEach(k => {
           if (k in rowData) {
             let val = rowData[k] || '';
-            if (k === 'image' && val) val = `<a href="${val}" target="_blank">View image 🔗</a>`;
-            rightHTML += `<div class="field-row"><strong>${k}</strong><span>${val}</span></div>`;
+
+            if (k === 'image' && val) {
+            val = `<a href="${val}" target="_blank">View image 🔗</a>`;
           }
+          
+            if (k === 'uid' && val) {
+              const baseUrl = 'https://collection.sciencemuseumgroup.org.uk/objects/';
+              val = `<a href="${baseUrl}${val}" target="_blank">${val}</a>`;
+          }
+
+            rightHTML += `<div class="field-row"><strong>${k}</strong><span>${val}</span></div>`;
+        }
+
         });
 
         // Unique SMG
@@ -313,4 +323,5 @@
   </script>
 </body>
 </html>
+
 
